@@ -1,9 +1,11 @@
 import random
 from datetime import datetime
-
+from dotenv import load_dotenv
 import os
 import streamlit as st
 from groq import Groq
+
+load_dotenv() 
 
 
 
