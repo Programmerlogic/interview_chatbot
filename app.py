@@ -1,18 +1,16 @@
 import random
 from datetime import datetime
-from dotenv import load_dotenv
 import os
 import streamlit as st
+from dotenv import load_dotenv
 from groq import Groq
 
-load_dotenv() 
-
-
+load_dotenv()
 
 # Initialize Groq client
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# Page configuration - must be first Streamlit command
+# Page configuration
 st.set_page_config(
     page_title="TalentScout - AI Hiring Assistant",
     page_icon="🧠",
@@ -20,7 +18,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for professional chat interface
+# Custom CSS (keeping your original styling)
 st.markdown("""
 <style>
     /* Main app styling */
@@ -39,7 +37,7 @@ st.markdown("""
         width: 100%;
     }
     
-    /* User message styling - RIGHT ALIGNED */
+    /* User message styling */
     .stChatMessage[data-testid="user-message"] {
         background-color: #007bff;
         color: white;
@@ -52,7 +50,7 @@ st.markdown("""
         text-align: right;
     }
     
-    /* Assistant message styling - LEFT ALIGNED */
+    /* Assistant message styling */
     .stChatMessage[data-testid="assistant-message"] {
         background-color: #f5f5f5;
         border-left: 4px solid #4caf50;
@@ -189,8 +187,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-
-
 PRIVACY_NOTICE = (
     "Your information will be used solely for recruitment purposes. "
     "We comply with GDPR and data-protection regulations. "
@@ -205,7 +201,6 @@ FALLBACK_RESPONSES = [
     "That's interesting! Can you elaborate a bit more?",
     "I want to be sure I understand – could you re-state that?",
 ]
-
 
 
 PHASES = [
@@ -245,10 +240,30 @@ def add_message(role: str, content: str, avatar: str | None = None):
     with st.chat_message(role, avatar=avatar):
         st.markdown(content)
 
-def phase_progress(current: str):
-    idx = PHASES.index(current)
-    pct = int(((idx + 1) / len(PHASES)) * 100)
-    st.sidebar.progress(pct, text=f"Phase: {PHASE_FRIENDLY[current]}")
+def update_progress_bar():
+    """Update the progress bar based on current phase and assessment progress."""
+    current_phase = st.session_state.phase
+    phase_idx = PHASES.index(current_phase)
+    total_phases = len(PHASES)
+    
+    if current_phase == "technical_assessment":
+        # Calculate fine-grained progress within technical assessment
+        answered_questions = len(st.session_state.get("technical_responses", []))
+        total_questions = st.session_state.get("total_questions", 3)
+        
+        # Base progress from completed phases
+        base_progress = phase_idx / total_phases
+        # Progress within current phase
+        phase_progress = (answered_questions / total_questions) / total_phases
+        
+        total_progress = int((base_progress + phase_progress) * 100)
+        label = f"{PHASE_FRIENDLY[current_phase]} ({answered_questions}/{total_questions})"
+    else:
+        # Standard phase progress
+        total_progress = int(((phase_idx + 1) / total_phases) * 100)
+        label = PHASE_FRIENDLY[current_phase]
+    
+    st.sidebar.progress(total_progress, text=f"Phase: {label}")
 
 def find_matching_tech(label: str) -> str | None:
     norm = label.lower().strip()
@@ -400,9 +415,11 @@ for message in st.session_state.messages:
 # Sidebar summary
 st.sidebar.header("📋 Candidate Summary")
 summary = st.sidebar.empty()
-phase_progress(st.session_state.phase)
 
-# Display welcome only on first load
+# 
+update_progress_bar()
+
+# Display welcome  on first load
 if st.session_state.phase == "welcome":
     add_message("assistant", "Hello! I'm **TalentScout**, your AI hiring assistant. 👋")
     add_message(
@@ -520,6 +537,7 @@ if user_input:
             )
             
             st.session_state.q_idx = 0
+            st.session_state.technical_responses = []  # Reset responses
             st.session_state.phase = "technical_assessment"
             
             ask_next_question()
@@ -564,12 +582,14 @@ if user_input:
             )
         else:
             add_message("assistant", random.choice(FALLBACK_RESPONSES))
+    
+   
+    st.rerun()
 
 # Export / reset widgets
 st.sidebar.markdown("---")
 
 # Export functionality
-# Export functionality (replace the existing export section)
 if st.sidebar.button("⬇️ Export Session Data"):
     try:
         # Create text format export
@@ -607,7 +627,7 @@ if st.sidebar.button("⬇️ Export Session Data"):
                 export_lines.append(f"{content}")
                 export_lines.append("")
             elif role == 'user':
-                # User messages aligned to the right (using spaces)
+                
                 lines = content.split('\n')
                 max_width = 60
                 export_lines.append(f"{'👤 User:':>60}")
@@ -615,7 +635,7 @@ if st.sidebar.button("⬇️ Export Session Data"):
                     if len(line) <= max_width:
                         export_lines.append(f"{line:>{max_width}}")
                     else:
-                        # Handle long lines by breaking them
+                        
                         words = line.split(' ')
                         current_line = ""
                         for word in words:
@@ -644,15 +664,13 @@ if st.sidebar.button("⬇️ Export Session Data"):
         export_lines.append("SESSION METADATA:")
         export_lines.append("-" * 20)
         export_lines.append(f"Total Questions: {st.session_state.get('total_questions', 3)}")
-        export_lines.append(f"Questions Answered: {st.session_state.get('q_idx', 0)}")
+        export_lines.append(f"Questions Answered: {len(st.session_state.get('technical_responses', []))}")
         export_lines.append(f"Completion Status: {st.session_state.get('phase', 'unknown').title()}")
-        
         export_lines.append("")
         export_lines.append("=" * 60)
         export_lines.append("END OF SESSION EXPORT")
         export_lines.append("=" * 60)
-        
-        # Join all lines into a single text string
+
         text_content = "\n".join(export_lines)
         
         st.sidebar.download_button(
@@ -665,7 +683,6 @@ if st.sidebar.button("⬇️ Export Session Data"):
         
     except Exception as e:
         st.sidebar.error(f"Export error: {str(e)}")
-
 
 # Reset functionality
 if st.sidebar.button("🔄 New Session", key="reset_session"):
