@@ -189,24 +189,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# Static data
-TECH_STACK_DATA = {
-    "Python": {
-        "frameworks": ["Django", "Flask", "FastAPI", "Pyramid"],
-    },
-    "JavaScript": {
-        "frameworks": ["React", "Vue.js", "Angular", "Node.js", "Express"],
-    },
-    "Java": {
-        "frameworks": ["Spring Boot", "Spring MVC", "Hibernate", "Maven", "Gradle"],
-    },
-    "React": {
-        "related": ["JavaScript", "Redux", "Next.js", "TypeScript"],
-    },
-    "Node.js": {
-        "related": ["Express", "MongoDB", "Socket.io", "NPM"],
-    },
-}
+
 
 PRIVACY_NOTICE = (
     "Your information will be used solely for recruitment purposes. "
@@ -223,13 +206,7 @@ FALLBACK_RESPONSES = [
     "I want to be sure I understand – could you re-state that?",
 ]
 
-ENCOURAGEMENTS = [
-    "Thank you for that detailed response!",
-    "Great explanation – I can see your understanding.",
-    "Excellent answer! That shows solid technical knowledge.",
-    "Thanks for sharing your experience with that.",
-    "That's a strong grasp of the concept!",
-]
+
 
 PHASES = [
     "welcome",
