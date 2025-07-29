@@ -587,7 +587,7 @@ if user_input:
             add_message("assistant", random.choice(FALLBACK_RESPONSES))
     
    
-    st.rerun()
+    #st.rerun()
 
 # Export / reset widgets
 st.sidebar.markdown("---")
