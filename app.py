@@ -236,7 +236,7 @@ PHASES = [
     "summary",
     "completion",
 ]
-global user_input
+
 PHASE_FRIENDLY = {
     "welcome": "Getting Started",
     "language_selection": "Language Selection",  
