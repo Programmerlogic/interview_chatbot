@@ -37,19 +37,41 @@ st.markdown("""
         width: 100%;
     }
     
-    /* User message styling */
-    .stChatMessage[data-testid="user-message"] {
-        background-color: #007bff;
-        color: white;
-        border-left: none;
-        border-right: 4px solid #0056b3;
-        margin-left: auto;
-        margin-right: 0;
-        max-width: 70%;
-        flex-direction: row-reverse;
-        text-align: right;
-    }
-    
+   /* User message styling */
+.stChatMessage[data-testid="user-message"] {
+    background-color: #007bff;
+    color: white;
+    border-left: none;
+    border-right: 4px solid #0056b3;
+    margin-left: auto;
+    margin-right: 0;
+    max-width: 70%;
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: flex-start;
+    width: fit-content; /* Ensures container only takes needed space */
+    min-width: 200px; /* Optional: sets minimum width */
+}
+
+/* Additional styling to ensure all child elements align right */
+.stChatMessage[data-testid="user-message"] * {
+    text-align: right !important;
+    align-self: flex-end;
+    width: 100%;
+}
+
+/* Specific targeting for text content */
+.stChatMessage[data-testid="user-message"] p,
+.stChatMessage[data-testid="user-message"] div,
+.stChatMessage[data-testid="user-message"] span {
+    text-align: right !important;
+    direction: rtl; /* Right-to-left direction for better right alignment */
+    unicode-bidi: plaintext; /* Maintains proper text rendering */
+}
+
+
     /* Assistant message styling */
     .stChatMessage[data-testid="assistant-message"] {
         background-color: #f5f5f5;
@@ -205,6 +227,7 @@ FALLBACK_RESPONSES = [
 
 PHASES = [
     "welcome",
+    "language_selection", 
     "consent",
     "personal_info",
     "professional_info",
@@ -213,9 +236,10 @@ PHASES = [
     "summary",
     "completion",
 ]
-
+global user_input
 PHASE_FRIENDLY = {
     "welcome": "Getting Started",
+    "language_selection": "Language Selection",  
     "consent": "Privacy Consent",
     "personal_info": "Personal Information",
     "professional_info": "Professional Background",
@@ -224,7 +248,39 @@ PHASE_FRIENDLY = {
     "summary": "Summary Review",
     "completion": "Complete",
 }
-
+#Function to detect language
+def detect_language_with_groq(user_input):
+    """Send user's language preference to Groq for processing."""
+    prompt = f"""
+    The user said: "{user_input}"
+    
+    They are trying to tell me what language they want to use for interview questions.
+    Please identify the language they mentioned and return just the language name in English.
+    
+    Examples:
+    - If they said "Spanish" or "Español" → return "Spanish"
+    - If they said "Hindi" or "हिंदी" → return "Hindi" 
+    - If they said "French" or "Français" → return "French"
+    - If they said "German" or "Deutsch" → return "German"
+    - If they said "Chinese" or "中文" → return "Chinese"
+    - If unclear, return "English"
+    
+    Return only the language name in English:
+    """
+    
+    try:
+        response = client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_completion_tokens=20,
+            top_p=1,
+            stream=False,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        st.error(f"Error processing language: {str(e)}")
+        return "English"
 # Helper functions
 def add_message(role: str, content: str, avatar: str | None = None):
     """Store message in session state and render it."""
@@ -257,7 +313,7 @@ def update_progress_bar():
         phase_progress = (answered_questions / total_questions) / total_phases
         
         total_progress = int((base_progress + phase_progress) * 100)
-        label = f"{PHASE_FRIENDLY[current_phase]} ({answered_questions}/{total_questions})"
+        label = f"{PHASE_FRIENDLY[current_phase]} "
     else:
         # Standard phase progress
         total_progress = int(((phase_idx + 1) / total_phases) * 100)
@@ -265,26 +321,22 @@ def update_progress_bar():
     
     st.sidebar.progress(total_progress, text=f"Phase: {label}")
 
-def find_matching_tech(label: str) -> str | None:
-    norm = label.lower().strip()
-    for key in TECH_STACK_DATA:
-        if key.lower() == norm:
-            return key
-    for key in TECH_STACK_DATA:
-        if norm in key.lower() or key.lower() in norm:
-            return key
-    return None
 
 def generate_ai_question(tech_stack: list, experience, position: str, question_num: int, total_questions: int):
     """Generate a technical question using Groq AI based on candidate's tech stack and position."""
     tech_stack_str = ", ".join(tech_stack)
+    
+    # Get the user's preferred language from session state
+    user_language = st.session_state.get("user_language", "English")
+    
     question_prompt = (
         f"Generate 1 technical interview question for a {position} role. "
         f"Focus on the following technologies: {tech_stack_str}. "
         f"Make it practical and relevant to real-world development scenarios. "
-        f"Return only the question without additional formatting."
-        f"Generate question for short one line answers."
-        f"Level: {experience}/20"
+        f"Return only the question without additional formatting. "
+        f"Generate question for short one line answers. "
+        f"Level: {experience}/20 "
+        f"Strictly generate the question in {user_language} language."
     )
     
     try:
@@ -299,10 +351,34 @@ def generate_ai_question(tech_stack: list, experience, position: str, question_n
         return response.choices[0].message.content.strip()
     except Exception as e:
         st.error(f"Error generating question: {str(e)}")
-        return f"Describe your experience working with {tech_stack[0] if tech_stack else 'your primary technology'} in a production environment."
+        
+        # Fallback question with language consideration
+        fallback_msg = f"Describe your experience working with {tech_stack[0] if tech_stack else 'your primary technology'} in a production environment."
+        
+        # Try to translate fallback if not English
+        if user_language.lower() != "english":
+            try:
+                translate_prompt = f"Translate this to {user_language}: {fallback_msg}"
+                translate_response = client.chat.completions.create(
+                    model="meta-llama/llama-4-scout-17b-16e-instruct",
+                    messages=[{"role": "user", "content": translate_prompt}],
+                    temperature=0.2,
+                    max_completion_tokens=100,
+                    stream=False,
+                )
+                return translate_response.choices[0].message.content.strip()
+            except:
+                pass
+        
+        return fallback_msg
+
 
 def evaluate_answer(question: str, answer: str, tech_context: str):
     """Evaluate candidate's answer using Groq AI."""
+    
+    # Get the user's preferred language from session state
+    user_language = st.session_state.get("user_language", "English")
+    
     eval_prompt = (
         f"You are an expert technical interviewer evaluating a candidate's response. "
         f"Your role is strictly limited to technical interview evaluation.\n\n"
@@ -316,9 +392,11 @@ def evaluate_answer(question: str, answer: str, tech_context: str):
         f"3. Clarity of explanation (0-10)\n"
         f"4. Correctness of explanation (0-10)\n"
         f"5. Brief constructive feedback\n"
-        f"Keep the response concise and professional."
-        f"Remember: You are conducting a technical interview. Stay focused on evaluating technical competency."
+        f"Keep the response concise and professional. "
+        f"Remember: You are conducting a technical interview. Stay focused on evaluating technical competency. "
+        f"Strictly generate the evaluation in {user_language} language."
     )
+    
     try:
         response = client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
@@ -351,6 +429,8 @@ def update_summary():
     if cd.get("tech_stack"):
         stack = ", ".join(cd["tech_stack"])
         lines.append(f"**Tech-Stack**: {stack}")
+    if cd.get("language_selection"):
+        lines.append(f"**Language**: {cd['language_selection']}")
     summary.markdown("\n\n".join(lines) if lines else "_No information yet…_")
 
 def ask_next_question():
@@ -409,6 +489,7 @@ if "phase" not in st.session_state:
     st.session_state.current_question = ""
     st.session_state.total_questions = 3
     st.session_state.technical_responses = []
+    st.session_state.user_language = "English"
 
 # Re-render all stored messages to maintain chat history
 for message in st.session_state.messages:
@@ -535,18 +616,43 @@ if user_input:
             add_message("assistant", f"Impressive stack: {', '.join(techs)}")
             add_message(
                 "assistant",
+                "**What language would you like to use for Questions?** 🌍\n\n"
+                "Please type your preferred language (e.g., English, Spanish, Hindi, French, etc.):"
+            )
+            # add_message(
+            #     "assistant",
+            #     "Perfect! Now I'll generate **AI-powered technical questions** "
+            #     f"tailored to your skills. Ready for {st.session_state.total_questions} questions?",
+            # )
+            
+            # st.session_state.q_idx = 0
+            # st.session_state.technical_responses = []  # Reset responses
+            st.session_state.phase = "language_selection"
+            
+            
+        else:
+            add_message("assistant", "Please provide at least one technology.")
+        # st.session_state.phase = "technical_assessment"
+        update_summary()
+    
+    elif phase=="language_selection":
+        detected_language = detect_language_with_groq(user_input)
+        st.session_state.user_language = detected_language
+        st.session_state.candidate["preferred_language"] = detected_language
+        cd = st.session_state.candidate
+        cd["language_selection"] = detected_language
+        add_message("assistant", f"Perfect! I've noted that you prefer **{detected_language}** for this Questions. 👍")
+        add_message(
+                "assistant",
                 "Perfect! Now I'll generate **AI-powered technical questions** "
                 f"tailored to your skills. Ready for {st.session_state.total_questions} questions?",
             )
             
-            st.session_state.q_idx = 0
-            st.session_state.technical_responses = []  # Reset responses
-            st.session_state.phase = "technical_assessment"
-            
-            ask_next_question()
-        else:
-            add_message("assistant", "Please provide at least one technology.")
-    
+        st.session_state.q_idx = 0
+        st.session_state.technical_responses = []  # Reset responses
+        st.session_state.phase = "technical_assessment"
+        update_summary()
+        ask_next_question()
     # Technical Q&A
     elif phase == "technical_assessment":
         # Store the user's answer
@@ -585,7 +691,8 @@ if user_input:
             )
         else:
             add_message("assistant", random.choice(FALLBACK_RESPONSES))
-    
+   
+
    
     #st.rerun()
 
