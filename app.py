@@ -305,6 +305,8 @@ def evaluate_answer(question: str, answer: str, tech_context: str):
     """Evaluate candidate's answer using Groq AI."""
     eval_prompt = (
         f"You are an expert technical interviewer evaluating a candidate's response. "
+        f"Your role is strictly limited to technical interview evaluation.\n\n"
+        f"IMPORTANT CONSTRAINTS:\n"
         f"Technology context: {tech_context}\n"
         f"Question: '{question}'\n"
         f"Candidate's answer: '{answer}'\n\n"
@@ -312,10 +314,11 @@ def evaluate_answer(question: str, answer: str, tech_context: str):
         f"1. Technical accuracy (0-10)\n"
         f"2. Completeness (0-10)\n"
         f"3. Clarity of explanation (0-10)\n"
-        f"4. Brief constructive feedback\n"
+        f"4. Correctness of explanation (0-10)\n"
+        f"5. Brief constructive feedback\n"
         f"Keep the response concise and professional."
+        f"Remember: You are conducting a technical interview. Stay focused on evaluating technical competency."
     )
-    
     try:
         response = client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
